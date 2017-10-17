@@ -1,1 +1,1 @@
-lab2测试通过，需修改inode_manager.cc、yfs_client.h、yfs_client.cc、fuse.cc。
+lab2测试通过，需修改inode_manager.cc、yfs_client.h、yfs_client.cc、fuse.cc、extent_protocol.h。
