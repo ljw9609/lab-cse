@@ -1,0 +1,1 @@
+lab4测试通过，需修改lock_server.h、lock_server.cc、lock_client.h、lock_client.cc、lock_smain.cc、fuse.cc、yfs_client.h、yfs_client.cc。
