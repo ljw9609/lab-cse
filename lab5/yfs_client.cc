@@ -25,161 +25,6 @@ yfs_client::yfs_client()
 }*/
 
 
-void
-yfs_client::commit(){
-    log.close();
-    char old_name[] = "temp.log";
-    stringstream ss;
-    string tmp;
-    ss << "version-" << version << ".log";
-    ss >> tmp;
-    rename(old_name, tmp.c_str());
-    log.open("temp.log");
-    version ++;
-}
-
-
-void
-yfs_client::undo(){
-    version --;
-    to_version(version);
-}
-
-void
-yfs_client::redo(){
-    version ++;
-    to_version(version);
-}
-
-void 
-yfs_client::to_version(int v){
-    lc->acquire(1);
-    if (ec->put(1, "") != extent_protocol::OK)
-        printf("error init root dir\n"); 
-    lc->release(1);
-    for (int i = 2; i <= 1024; i++) {
-        ec->remove(i);
-    }
-    log.close();
-    log.open("total.log", std::fstream::app);
-    log << "to_version-" << v << endl;
-
-    for(int i = 1;i <= v;i++){
-        stringstream ss;
-        string tmp;
-        ss << "version-" << i << ".log";
-        ss >> tmp;
-        log << tmp << endl;
-
-        FILE* file = fopen(tmp.c_str(), "r");
-        char tmp_action[10];
-        while(fscanf(file,"%s",tmp_action) != EOF){
-            string action = string(tmp_action);
-
-            
-                if(action == "setattr"){
-                    fscanf(file," ");
-                    inum ino;
-                    size_t size = 0;
-                    fscanf(file,"%lld,%ld\n",&ino,&size);
-                    //log << "log: " << ino << "," << size;
-                    setattr(ino,size);
-                }
-
-                if(action == "create"){
-                    fscanf(file, " ");
-                    inum ino;
-                    int size = 0;
-                    mode_t mode = 0;
-                    inum ino_out;
-                    fscanf(file,"%lld,%d,%d,%lld\n",&ino,&size,&mode,&ino_out);
-                    string str;
-                    for (int i = 0;i < size;i++) {
-                        char c = getc(file);
-                        str += c;
-                    }
-                    create(ino,str.c_str(),mode,ino_out);
-                }
-
-                if(action == "mkdir"){
-                    fscanf(file, " ");
-                    inum ino;
-                    int size = 0;
-                    mode_t mode = 0;
-                    inum ino_out;
-                    fscanf(file,"%lld,%d,%d,%lld\n",&ino,&size,&mode,&ino_out);
-                    string str;
-                    for(int i = 0;i < size;i++) {
-                        char c = getc(file);
-                        str += c;
-                    }
-                    //log << "log: "<< str << endl;
-                    mkdir(ino,str.c_str(),mode,ino_out);
-                }
-
-                if(action == "write"){
-                    fscanf(file, " ");
-                    inum ino;
-                    size_t size = 0;
-                    off_t off;
-                    int length = 0;
-                    fscanf(file,"%lld,%ld,%ld,%d\n",&ino,&size,&off,&length);
-                    string str;
-                    for(int i = 0; i < length; i++) {
-                        int tmp;
-                        fscanf(file, "%d ", &tmp);
-                        str += (char)tmp;
-                    }           
-                    size_t a;
-                    //log << "log: " << str << endl;
-                    write(ino,size,off,str.c_str(),a);
-                }
-
-                if(action == "unlink"){
-                    fscanf(file," ");
-                    inum ino;
-                    int length = 0;
-                    fscanf(file,"%lld,%d\n",&ino,&length);
-                    string str;
-                    for(int i = 0;i < length;i++) {
-                        char c = getc(file);
-                        str += c;
-                    }
-                    unlink(ino,str.c_str());
-                }
-
-                if(action == "symlink"){
-                    fscanf(file," ");
-                    inum ino;
-                    int length = 0;
-                    size_t size = 0;
-                    inum ino_out;
-                    fscanf(file,"%lld,%d,%d,%lld\n",&ino,&length,&size,&ino_out);
-                    string str;
-                    for(int i = 0;i < length;i++) {
-                        char c = getc(file);
-                        str += c;
-                    }
-                    fscanf(file,"\n");
-                    string str2;
-                    for (int i = 0;i < size;i++) {
-                        char c = getc(file);
-                        str += c;
-                    }
-                    symlink(ino,str.c_str(),str2.c_str(),ino_out);
-                }
-
-            
-            bzero(tmp_action, sizeof(tmp_action));
-            fscanf(file, "\n");
-        }
-        fclose(file);
-        log << tmp << endl;
-    }
-    log.close();
-    log.open("temp.log");
-
-}
 
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
@@ -751,7 +596,7 @@ yfs_client::write_helper(inum ino, size_t size, off_t off, const char *data,
     }
 
     if (off + size > buf.size())
-        buf += std::string(off + size - buf.size(), 0);
+        buf += string(off + size - buf.size(), 0);
     buf.replace(off, size, dataBuf);
     bytes_written = size;
     
@@ -920,4 +765,161 @@ int yfs_client::readlink(inum ino,string &link)
 
     lc->release(ino);
     return r;
+}
+
+
+void 
+yfs_client::to_version(int v){
+    lc->acquire(1);
+    if (ec->put(1, "") != extent_protocol::OK)
+        printf("error init root dir\n"); 
+    lc->release(1);
+    for (int i = 2; i <= 1024; i++) {
+        ec->remove(i);
+    }
+    log.close();
+    log.open("total.log", std::fstream::app);
+    log << "to_version-" << v << endl;
+
+    for(int i = 1;i <= v;i++){
+        stringstream ss;
+        string tmp;
+        ss << "version-" << i << ".log";
+        ss >> tmp;
+        log << tmp << endl;
+
+        FILE* file = fopen(tmp.c_str(), "r");
+        char tmp_action[10];
+        while(fscanf(file,"%s",tmp_action) != EOF){
+            string action = string(tmp_action);
+
+            
+                if(action == "setattr"){
+                    fscanf(file," ");
+                    inum ino;
+                    size_t size = 0;
+                    fscanf(file,"%lld,%ld\n",&ino,&size);
+                    //log << "log: " << ino << "," << size;
+                    setattr(ino,size);
+                }
+
+                if(action == "create"){
+                    fscanf(file, " ");
+                    inum ino;
+                    int size = 0;
+                    mode_t mode = 0;
+                    inum ino_out;
+                    fscanf(file,"%lld,%d,%d,%lld\n",&ino,&size,&mode,&ino_out);
+                    string str;
+                    for (int i = 0;i < size;i++) {
+                        char c = getc(file);
+                        str += c;
+                    }
+                    create(ino,str.c_str(),mode,ino_out);
+                }
+
+                if(action == "mkdir"){
+                    fscanf(file, " ");
+                    inum ino;
+                    int size = 0;
+                    mode_t mode = 0;
+                    inum ino_out;
+                    fscanf(file,"%lld,%d,%d,%lld\n",&ino,&size,&mode,&ino_out);
+                    string str;
+                    for(int i = 0;i < size;i++) {
+                        char c = getc(file);
+                        str += c;
+                    }
+                    //log << "log: "<< str << endl;
+                    mkdir(ino,str.c_str(),mode,ino_out);
+                }
+
+                if(action == "write"){
+                    fscanf(file, " ");
+                    inum ino;
+                    size_t size = 0;
+                    off_t off;
+                    int length = 0;
+                    fscanf(file,"%lld,%ld,%ld,%d\n",&ino,&size,&off,&length);
+                    string str;
+                    for(int i = 0; i < length; i++) {
+                        int tmp;
+                        fscanf(file, "%d ", &tmp);
+                        str += (char)tmp;
+                    }           
+                    size_t a;
+                    //log << "log: " << str << endl;
+                    write(ino,size,off,str.c_str(),a);
+                }
+
+                if(action == "unlink"){
+                    fscanf(file," ");
+                    inum ino;
+                    int length = 0;
+                    fscanf(file,"%lld,%d\n",&ino,&length);
+                    string str;
+                    for(int i = 0;i < length;i++) {
+                        char c = getc(file);
+                        str += c;
+                    }
+                    unlink(ino,str.c_str());
+                }
+
+                if(action == "symlink"){
+                    fscanf(file," ");
+                    inum ino;
+                    int length = 0;
+                    size_t size = 0;
+                    inum ino_out;
+                    fscanf(file,"%lld,%d,%d,%lld\n",&ino,&length,&size,&ino_out);
+                    string str;
+                    for(int i = 0;i < length;i++) {
+                        char c = getc(file);
+                        str += c;
+                    }
+                    fscanf(file,"\n");
+                    string str2;
+                    for (int i = 0;i < size;i++) {
+                        char c = getc(file);
+                        str += c;
+                    }
+                    symlink(ino,str.c_str(),str2.c_str(),ino_out);
+                }
+
+            
+            bzero(tmp_action, sizeof(tmp_action));
+            fscanf(file, "\n");
+        }
+        fclose(file);
+        log << tmp << endl;
+    }
+    log.close();
+    log.open("temp.log");
+
+}
+
+void
+yfs_client::commit(){
+    log.close();
+    char old_name[] = "temp.log";
+    stringstream ss;
+    string tmp;
+    ss << "version-" << version << ".log";
+    ss >> tmp;
+    rename(old_name, tmp.c_str());
+    log.open("temp.log");
+    version ++;
+}
+
+
+void
+yfs_client::undo(){
+    version --;
+    to_version(version);
+}
+
+void
+yfs_client::redo(){
+    version ++;
+    to_version(version);
 }

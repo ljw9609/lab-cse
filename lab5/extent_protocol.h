@@ -16,9 +16,6 @@ class extent_protocol {
     getattr,
     remove,
     create
-    //commit,
-    //redo,
-    //undo
   };
 
   enum types {

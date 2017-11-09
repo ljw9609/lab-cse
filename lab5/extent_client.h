@@ -22,12 +22,6 @@ class extent_client {
   extent_protocol::status put(extent_protocol::extentid_t eid, std::string buf);
   extent_protocol::status remove(extent_protocol::extentid_t eid);
 
-  // lab5 code here
-  /*
-  extent_protocol::status commit();
-  extent_protocol::status undo();
-  extent_protocol::status redo();
-  */
 };
 
 #endif 
