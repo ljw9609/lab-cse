@@ -1,0 +1,1 @@
+lab5-version测试通过，此为版本一，在yfs_client层进行log记录。需修改fuse.cc、yfs_client.h、yfs_client.cc。
