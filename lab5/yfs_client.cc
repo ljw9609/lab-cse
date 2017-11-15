@@ -24,8 +24,13 @@ yfs_client::yfs_client()
 
 }*/
 
+yfs_client::yfs_client()
+{
+  ec = NULL;
+  lc = NULL;
+}
 
-
+/*
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
     ec = new extent_client(extent_dst);
@@ -37,6 +42,27 @@ yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
     if (ec->put(1, "") != extent_protocol::OK)
         printf("error init root dir\n"); // XYB: init root dir
     lc->release(1);
+}
+*/
+
+yfs_client::yfs_client(std::string extent_dst, std::string lock_dst, const char* cert_file)
+{
+  ec = new extent_client(extent_dst);
+  lc = new lock_client(lock_dst);
+  log.open("temp.log");
+  version = 1;
+  
+  lc->acquire(1);
+  if (ec->put(1, "") != extent_protocol::OK)
+      printf("error init root dir\n"); // XYB: init root dir
+  lc->release(1);
+}
+
+int
+yfs_client::verify(const char* name, unsigned short *uid)
+{
+    int ret = OK;
+    return ret;
 }
 
 yfs_client::inum
@@ -227,7 +253,9 @@ yfs_client::setattr(inum ino, size_t size)
      * note: get the content of inode ino, and modify its content
      * according to the size (<, =, or >) content length.
      */
-    log << "setattr " << ino << "," << size << endl;   //format: setattr 80,128
+
+    //format: setattr ino:80,size:128
+    log << "setattr " << "ino:" << ino << ",size:" << size << endl;   
 
     printf("test setattr %016llx,new size=%d",ino,size);
 
@@ -313,9 +341,9 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
 
     lc->release(parent);
 
-    //format: create 5,5,3,6
+    //format: create parent:5,namelength:5,mode:3,ino:6
     //        abc
-    log << "create " << parent << "," << strlen(name) << "," << mode << "," << ino_out << endl << name << endl;
+    log << "create " << "parent:" << parent << ",namelength:" << strlen(name) << ",mode:" << mode << ",ino:" << ino_out << endl << name << endl;
     
     return r;
 }
@@ -367,9 +395,9 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
 
     lc->release(parent);
 
-    //format: mkdir 5,5,3,6
+    //format: mkdir parent:5,namelength:5,mode:3,ino:6
     //        abc
-    log << "mkdir " << parent << "," << strlen(name) << "," << mode << "," << ino_out << endl << name << endl;
+    log << "mkdir " << "parent:" << parent << ",namelength:" << strlen(name) << ",mode:" << mode << ",ino:" << ino_out << endl << name << endl;
     
     return r;
 }
@@ -400,15 +428,6 @@ yfs_client::lookup_helper(inum parent, const char *name, bool &found, inum &ino_
     list<dirent> direnties;
     dirent entry;
     found = false;
-
-    /*
-    extent_protocol::attr attr;
-
-    ec->getattr(parent, attr);
-    if (attr.type != extent_protocol::T_DIR){
-        r = IOERR;
-        return r;
-    } */
 
     r = readdir_helper(parent,direnties);
     if(r != OK){
@@ -523,18 +542,6 @@ yfs_client::read(inum ino, size_t size, off_t off, std::string &data)
         return r;
     }
     // read file start from offset
-    /*
-    if(off > buf.size()){
-        data = "";
-    }
-    else{
-        if(off + size > buf.size()){
-            data = buf.substr(off,buf.size()-size);
-        }else{
-            data = buf.substr(off,size);
-        }
-    }*/
-    
     if(off + size > buf.size()){
         data = buf.substr(off);
     }
@@ -558,9 +565,9 @@ int
 yfs_client::write(inum ino, size_t size, off_t off, const char *data,
         size_t &bytes_written)
 {   
-    //format: write 2,2,2,2
+    //format: write ino:2,size:2,off:2,datalength:2
     //        a a a a a 
-    log << "write " << ino << "," << size << "," << off << "," << strlen(data) << endl;
+    log << "write " << "ino:" << ino << ",size:" << size << ",off:" << off << ",datalength:" << strlen(data) << endl;
     for (int i = 0; i < strlen(data); i++) 
         log << (int)data[i] << " ";
     log << endl;
@@ -599,54 +606,16 @@ yfs_client::write_helper(inum ino, size_t size, off_t off, const char *data,
         buf += string(off + size - buf.size(), 0);
     buf.replace(off, size, dataBuf);
     bytes_written = size;
-    
     ec->put(ino, buf);
+
     return r;    
-    // read whole file to buffer
-    /*
-    string buf;
-    if(ec->get(ino,buf) != extent_protocol::OK){
-        r = IOERR;
-        return r;
-    }
-    
-    if(off >= buf.size()){   //off >= length of orignal file
-        bytes_written = size + off - buf.size();
-        buf.resize(off + size,'\0');
-    }
-    else{   //off < length of orignal file
-        if(off + size > buf.size()){
-            buf.resize(off + size,'\0');
-            bytes_written = size;
-        }
-        else{
-            bytes_written = size;
-        }
-    }
-
-    buf.replace(off,size,data,size);
-    ec->put(ino,buf);
-
-    #ifdef DEBUG
-    printf("write after:\n");
-    for (int i = 0; i < buf.size(); i++) {
-        printf("%c", buf[i]);
-    }
-    printf("\n");
-    #endif
-    #ifdef DEBUG
-    printf("finish write,ino=%016llx,bytes_written=%d",ino,bytes_written);
-    #endif
-
-    return r;
-    */
 }
 
 int yfs_client::unlink(inum parent,const char *name)
 {   
-    //format: unlink 2,3
+    //format: unlink parent:2,namelength:3
     //        abc
-    log << "unlink " << parent << "," << strlen(name) << endl << name << endl;
+    log << "unlink " << "parent:" << parent << ",namelength:" << strlen(name) << endl << name << endl;
     
     int r = OK;
 
@@ -689,10 +658,8 @@ int yfs_client::unlink(inum parent,const char *name)
 
     //printf("orignal dir content:%s\n",buf.c_str());
     pos = buf.find(name_str);
-
     buf.replace(pos,strlen(name) + filename(ino_out).size() + 2,"");
-
-    ec->put(parent,buf);
+	ec->put(parent,buf);
 
     //printf("finish unlink,new dir content:%s\n",buf.c_str());
 
@@ -702,10 +669,10 @@ int yfs_client::unlink(inum parent,const char *name)
 
 int yfs_client::symlink(inum parent, const char *name, const char *link, inum &ino_out)
 {   
-    //format: symlink 2,3,4,5
+    //format: symlink parent:2,namelength:3,linklength:4,ino:5
     //        name
     //        link
-    log << "symlink " << parent << "," << strlen(name) << "," << strlen(link) << "," << ino_out << endl << name << endl << link << endl;
+    log << "symlink " << "parent:" << parent << ",namelength:" << strlen(name) << ",linklength:" << strlen(link) << ",ino:" << ino_out << endl << name << endl << link << endl;
     
     int r = OK;
     printf("test symlink,parent ino=%016llx,%s--->%s\n",parent,name,link);
@@ -754,16 +721,12 @@ int yfs_client::readlink(inum ino,string &link)
 {
     int r = OK;
 
-    //printf("test readlink,inum=%016llx\n", ino);
-
     lc->acquire(ino);
-
     if(ec->get(ino,link) != extent_protocol::OK){
-        //printf("read lnk error\n");
         r = IOERR;
     }
-
     lc->release(ino);
+
     return r;
 }
 
@@ -778,13 +741,13 @@ yfs_client::to_version(int v){
         ec->remove(i);
     }
     log.close();
-    log.open("total.log", std::fstream::app);
+    log.open("monitor.log", std::fstream::app);
     log << "to_version-" << v << endl;
 
     for(int i = 1;i <= v;i++){
         stringstream ss;
         string tmp;
-        ss << "version-" << i << ".log";
+        ss << "version" << i << ".log";
         ss >> tmp;
         log << tmp << endl;
 
@@ -793,12 +756,11 @@ yfs_client::to_version(int v){
         while(fscanf(file,"%s",tmp_action) != EOF){
             string action = string(tmp_action);
 
-            
                 if(action == "setattr"){
                     fscanf(file," ");
                     inum ino;
                     size_t size = 0;
-                    fscanf(file,"%lld,%ld\n",&ino,&size);
+                    fscanf(file,"ino:%lld,size:%ld\n",&ino,&size);
                     //log << "log: " << ino << "," << size;
                     setattr(ino,size);
                 }
@@ -809,7 +771,7 @@ yfs_client::to_version(int v){
                     int size = 0;
                     mode_t mode = 0;
                     inum ino_out;
-                    fscanf(file,"%lld,%d,%d,%lld\n",&ino,&size,&mode,&ino_out);
+                    fscanf(file,"parent:%lld,namelength:%d,mode:%d,ino:%lld\n",&ino,&size,&mode,&ino_out);
                     string str;
                     for (int i = 0;i < size;i++) {
                         char c = getc(file);
@@ -824,7 +786,7 @@ yfs_client::to_version(int v){
                     int size = 0;
                     mode_t mode = 0;
                     inum ino_out;
-                    fscanf(file,"%lld,%d,%d,%lld\n",&ino,&size,&mode,&ino_out);
+                    fscanf(file,"parent:%lld,namelength:%d,mode:%d,ino:%lld\n",&ino,&size,&mode,&ino_out);
                     string str;
                     for(int i = 0;i < size;i++) {
                         char c = getc(file);
@@ -840,7 +802,7 @@ yfs_client::to_version(int v){
                     size_t size = 0;
                     off_t off;
                     int length = 0;
-                    fscanf(file,"%lld,%ld,%ld,%d\n",&ino,&size,&off,&length);
+                    fscanf(file,"ino:%lld,size:%ld,off:%ld,datalength:%d\n",&ino,&size,&off,&length);
                     string str;
                     for(int i = 0; i < length; i++) {
                         int tmp;
@@ -856,7 +818,7 @@ yfs_client::to_version(int v){
                     fscanf(file," ");
                     inum ino;
                     int length = 0;
-                    fscanf(file,"%lld,%d\n",&ino,&length);
+                    fscanf(file,"parent:%lld,namelength:%d\n",&ino,&length);
                     string str;
                     for(int i = 0;i < length;i++) {
                         char c = getc(file);
@@ -871,7 +833,7 @@ yfs_client::to_version(int v){
                     int length = 0;
                     size_t size = 0;
                     inum ino_out;
-                    fscanf(file,"%lld,%d,%d,%lld\n",&ino,&length,&size,&ino_out);
+                    fscanf(file,"parent:%lld,namelength:%d,linklength:%d,ino:%lld\n",&ino,&length,&size,&ino_out);
                     string str;
                     for(int i = 0;i < length;i++) {
                         char c = getc(file);
@@ -885,8 +847,6 @@ yfs_client::to_version(int v){
                     }
                     symlink(ino,str.c_str(),str2.c_str(),ino_out);
                 }
-
-            
             bzero(tmp_action, sizeof(tmp_action));
             fscanf(file, "\n");
         }
@@ -904,7 +864,7 @@ yfs_client::commit(){
     char old_name[] = "temp.log";
     stringstream ss;
     string tmp;
-    ss << "version-" << version << ".log";
+    ss << "version" << version << ".log";
     ss >> tmp;
     rename(old_name, tmp.c_str());
     log.open("temp.log");

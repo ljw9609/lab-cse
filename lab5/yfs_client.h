@@ -20,7 +20,9 @@ class yfs_client {
  public:
 
   typedef unsigned long long inum;
-  enum xxstatus { OK, RPCERR, NOENT, IOERR, EXIST };
+  //enum xxstatus { OK, RPCERR, NOENT, IOERR, EXIST };
+  enum xxstatus { OK, RPCERR, NOENT, IOERR, EXIST,
+        NOPEM, ERRPEM, EINVA, ECTIM, ENUSE };
   typedef int status;
 
   struct fileinfo {
@@ -56,7 +58,9 @@ class yfs_client {
  public:
 
   //yfs_client();
-  yfs_client(std::string, std::string);
+  //yfs_client(std::string, std::string);
+  yfs_client();
+  yfs_client(std::string, std::string, const char*);
 
   bool isfile(inum);
   bool isdir(inum);
@@ -76,6 +80,7 @@ class yfs_client {
   int unlink(inum,const char *);
   int mkdir(inum , const char *, mode_t , inum &);
 
+  int verify(const char* cert_file, unsigned short*);
   
   /** you may need to add symbolic link related methods here.*/
   int symlink(inum , const char * , const char * , inum &);

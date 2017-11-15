@@ -19,7 +19,7 @@ LOCK_PORT=$[BASE_PORT+6]
 YFSDIR1=$PWD/yfs1
 YFSDIR2=$PWD/yfs2
 
-# ROOTPEM=./cert/root.pem
+ROOTPEM=./cert/root.pem
 
 if [ "$LOSSY" ]; then
     export RPC_LOSSY=$LOSSY
